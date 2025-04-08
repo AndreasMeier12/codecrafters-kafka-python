@@ -43,9 +43,17 @@ def main():
     accepted_socket, _ = server.accept()  # wait for client
 
     while msg := accepted_socket.recv(1024):
-        header: KafkaHeader = KafkaHeader.of(msg)
 
-        accepted_socket.sendall(struct.pack(">q",header.correlation_id))
+        header: KafkaHeader = KafkaHeader.of(msg)
+        error_code = 0 if 0<= header.request_api_version <= 4 else 35
+        message = header.correlation_id.to_bytes(4, byteorder="big", signed=True)
+        if error_code:
+            message = message + error_code.to_bytes(2, byteorder="big", signed=True)
+        message_len = len(message).to_bytes(4, byteorder="big", signed=False)
+        message = message_len + message
+
+
+        accepted_socket.sendall(message)
 
 
 
