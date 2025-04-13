@@ -33,6 +33,10 @@ class KafkaHeader:
         correlation_id = int.from_bytes(msg[8:12], "big")
         return KafkaHeader(message_size, request_api_key, request_api_version, correlation_id)
 
+def get_version_error_number(header: KafkaHeader) -> int:
+    if MIN_VERSION <= header.request_api_version <= MAX_VERSION:
+        return 0
+    return 35
 
 
 def main():
@@ -54,22 +58,27 @@ def main():
 
 
 
+
+
     header: KafkaHeader = KafkaHeader.of(msg)
-    error_code = 0 if MIN_VERSION <= header.request_api_version <= MAX_VERSION else 35
-    message = header.correlation_id.to_bytes(4, byteorder="big", signed=True)
-    message = message + error_code.to_bytes(2, byteorder="big", signed=True)
-    message = message + array_size.to_bytes(1)
-    message = message + header.request_api_key.to_bytes(4, byteorder="big")
-    message = message + MIN_VERSION.to_bytes(2, byteorder="big")
-    message = message + MAX_VERSION.to_bytes(2, byteorder="big")
-    message = message + tag_buffer
-    message = message + THROTTLE_TIME_MS.to_bytes(4, byteorder="big")
-    message = message + (0).to_bytes(4, byteorder="big")
-    message_len = len(message).to_bytes(4, byteorder="big", signed=False)
-    message = message_len + message
+    error_bytes = get_version_error_number(header).to_bytes(2, "big", signed=True)
 
+    message_bytes = header.correlation_id.to_bytes(4, byteorder="big", signed=True)
+    message_bytes += error_bytes
+    message_bytes += int(2).to_bytes(1, byteorder="big", signed=True)
+    message_bytes += header.request_api_key.to_bytes(2, byteorder="big", signed=True)
+    message_bytes += MIN_VERSION.to_bytes(2, byteorder="big", signed=True)
+    message_bytes += MAX_VERSION.to_bytes(2, byteorder="big", signed=True)
+    message_bytes += tag_buffer
 
-    accepted_socket.sendall(message)
+    message_bytes += THROTTLE_TIME_MS.to_bytes(4, byteorder="big", signed=True)
+
+    message_bytes += tag_buffer
+    req_len = len(message_bytes).to_bytes(4, byteorder="big", signed=True)
+
+    response = req_len + message_bytes
+
+    accepted_socket.sendall(response)
 
 
 
