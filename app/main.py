@@ -2,6 +2,11 @@ import socket  # noqa: F401
 import struct
 from dataclasses import dataclass
 
+MIN_VERSION = 0
+MAX_VERSION = 4
+API_VERSION = 18
+
+THROTTLE_TIME_MS = 4
 
 def create_message(id):
 
@@ -42,18 +47,29 @@ def main():
 
     accepted_socket, _ = server.accept()  # wait for client
 
-    while msg := accepted_socket.recv(1024):
-
-        header: KafkaHeader = KafkaHeader.of(msg)
-        error_code = 0 if 0<= header.request_api_version <= 4 else 35
-        message = header.correlation_id.to_bytes(4, byteorder="big", signed=True)
-        if error_code:
-            message = message + error_code.to_bytes(2, byteorder="big", signed=True)
-        message_len = len(message).to_bytes(4, byteorder="big", signed=False)
-        message = message_len + message
+    msg = accepted_socket.recv(1024)
+    num_api_keys = 2
+    tag_buffer = b"\x00"
+    array_size = 1
 
 
-        accepted_socket.sendall(message)
+
+    header: KafkaHeader = KafkaHeader.of(msg)
+    error_code = 0 if MIN_VERSION <= header.request_api_version <= MAX_VERSION else 35
+    message = header.correlation_id.to_bytes(4, byteorder="big", signed=True)
+    message = message + error_code.to_bytes(2, byteorder="big", signed=True)
+    message = message + array_size.to_bytes(1)
+    message = message + header.request_api_key.to_bytes(4, byteorder="big")
+    message = message + MIN_VERSION.to_bytes(2, byteorder="big")
+    message = message + MAX_VERSION.to_bytes(2, byteorder="big")
+    message = message + tag_buffer
+    message = message + THROTTLE_TIME_MS.to_bytes(4, byteorder="big")
+    message = message + (0).to_bytes(4, byteorder="big")
+    message_len = len(message).to_bytes(4, byteorder="big", signed=False)
+    message = message_len + message
+
+
+    accepted_socket.sendall(message)
 
 
 
