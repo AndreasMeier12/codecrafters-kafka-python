@@ -1,5 +1,6 @@
 import socket  # noqa: F401
 import struct
+import threading
 from dataclasses import dataclass
 
 MIN_VERSION = 0
@@ -38,6 +39,33 @@ def get_version_error_number(header: KafkaHeader) -> int:
         return 0
     return 35
 
+def handle_request(accepted_socket: socket) -> None:
+    while True:
+        msg = accepted_socket.recv(1024)
+        num_api_keys = 2
+        tag_buffer = b"\x00"
+        array_size = 1
+
+        header: KafkaHeader = KafkaHeader.of(msg)
+        error_bytes = get_version_error_number(header).to_bytes(2, "big", signed=False)
+
+        message_bytes = header.correlation_id.to_bytes(4, byteorder="big", signed=False)
+        message_bytes += error_bytes
+        message_bytes += int(2).to_bytes(1, byteorder="big", signed=False)
+        message_bytes += header.request_api_key.to_bytes(2, byteorder="big", signed=False)
+        message_bytes += MIN_VERSION.to_bytes(2, byteorder="big", signed=False)
+        message_bytes += MAX_VERSION.to_bytes(2, byteorder="big", signed=False)
+        message_bytes += tag_buffer
+
+        message_bytes += THROTTLE_TIME_MS.to_bytes(4, byteorder="big", signed=False)
+
+        message_bytes += tag_buffer
+        req_len = len(message_bytes).to_bytes(4, byteorder="big", signed=False)
+
+        response = req_len + message_bytes
+
+        accepted_socket.sendall(response)
+
 
 def main():
 
@@ -49,32 +77,11 @@ def main():
 
     server = socket.create_server(("localhost", 9092), reuse_port=True)
 
-    accepted_socket, _ = server.accept()  # wait for client
     while True:
-        msg = accepted_socket.recv(1024)
-        num_api_keys = 2
-        tag_buffer = b"\x00"
-        array_size = 1
+        accepted_socket, _ = server.accept()
+        # wait for client
+        threading.Thread(target=handle_request, args=(accepted_socket,)).start()
 
-        header: KafkaHeader = KafkaHeader.of(msg)
-        error_bytes = get_version_error_number(header).to_bytes(2, "big", signed=True)
-
-        message_bytes = header.correlation_id.to_bytes(4, byteorder="big", signed=True)
-        message_bytes += error_bytes
-        message_bytes += int(2).to_bytes(1, byteorder="big", signed=True)
-        message_bytes += header.request_api_key.to_bytes(2, byteorder="big", signed=True)
-        message_bytes += MIN_VERSION.to_bytes(2, byteorder="big", signed=True)
-        message_bytes += MAX_VERSION.to_bytes(2, byteorder="big", signed=True)
-        message_bytes += tag_buffer
-
-        message_bytes += THROTTLE_TIME_MS.to_bytes(4, byteorder="big", signed=True)
-
-        message_bytes += tag_buffer
-        req_len = len(message_bytes).to_bytes(4, byteorder="big", signed=True)
-
-        response = req_len + message_bytes
-
-        accepted_socket.sendall(response)
 
 
 
