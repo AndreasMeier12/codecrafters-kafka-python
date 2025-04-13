@@ -1,26 +1,40 @@
 import socket  # noqa: F401
 import struct
+import sys
 import threading
 from dataclasses import dataclass
+import pathlib
+from enum import Enum
 
-MIN_VERSION = 0
-MAX_VERSION = 4
+API_VERSION_MIN_VERSION = 0
+API_VERSION_MAX_VERSION = 4
 API_VERSION = 18
 
 THROTTLE_TIME_MS = 4
 
-def create_message(id):
 
-    id_bytes = id.to_bytes(4, byteorder="big")
-    return len(id_bytes).to_bytes(4, byteorder="big") + id_bytes
+class ApiKeys(Enum):
+    API_VERSION_REQUEST = 18, 0, 4
+    DESCRIBE_TOPIC_PARTITIONS = 75, 0, 0
 
-def handle_client(client: socket):
-    client.recv(1024)
-    client.sendall(create_message(7))
-    client.close()
+    def __new__(cls, *args, **kwds):
+        obj = object.__new__(cls)
+        obj._value_ = args[0]
+        return obj
+
+    def __init__(self, key: int, min_version: int, max_version: int):
+        self.key = key
+        self.min_version = min_version
+        self.max_version = max_version
+
+    @staticmethod
+    def get_Version(request_key: int):
+        return next(x for x in ApiKeys if x.key == request_key)
+
+
 
 @dataclass
-class KafkaHeader:
+class KafkaRequestHeader:
     message_size: int
     request_api_key: int
     request_api_version: int
@@ -32,29 +46,40 @@ class KafkaHeader:
         request_api_key = int.from_bytes(msg[4:6], "big")
         request_api_version = int.from_bytes(msg[6:8], "big")
         correlation_id = int.from_bytes(msg[8:12], "big")
-        return KafkaHeader(message_size, request_api_key, request_api_version, correlation_id)
+        return KafkaRequestHeader(message_size, request_api_key, request_api_version, correlation_id)
 
-def get_version_error_number(header: KafkaHeader) -> int:
-    if MIN_VERSION <= header.request_api_version <= MAX_VERSION:
+@dataclass()
+class ServerArguments:
+    properties_path: pathlib.Path
+
+
+def get_version_error_number(header: KafkaRequestHeader, key: ApiKeys) -> int:
+    if key.min_version <= header.request_api_version <= key.max_version:
         return 0
     return 35
 
-def handle_request(accepted_socket: socket) -> None:
+
+def handle_request(accepted_socket: socket, server_args: ServerArguments) -> None:
+
+
+
+
     while True:
         msg = accepted_socket.recv(1024)
         num_api_keys = 2
         tag_buffer = b"\x00"
         array_size = 1
 
-        header: KafkaHeader = KafkaHeader.of(msg)
-        error_bytes = get_version_error_number(header).to_bytes(2, "big", signed=False)
+        header: KafkaRequestHeader = KafkaRequestHeader.of(msg)
+        type = ApiKeys.get_Version(header.request_api_key)
+        error_bytes = get_version_error_number(header, type).to_bytes(2, "big", signed=False)
 
         message_bytes = header.correlation_id.to_bytes(4, byteorder="big", signed=False)
         message_bytes += error_bytes
         message_bytes += int(2).to_bytes(1, byteorder="big", signed=False)
         message_bytes += header.request_api_key.to_bytes(2, byteorder="big", signed=False)
-        message_bytes += MIN_VERSION.to_bytes(2, byteorder="big", signed=False)
-        message_bytes += MAX_VERSION.to_bytes(2, byteorder="big", signed=False)
+        message_bytes += API_VERSION_MIN_VERSION.to_bytes(2, byteorder="big", signed=False)
+        message_bytes += API_VERSION_MAX_VERSION.to_bytes(2, byteorder="big", signed=False)
         message_bytes += tag_buffer
 
         message_bytes += THROTTLE_TIME_MS.to_bytes(4, byteorder="big", signed=False)
@@ -70,6 +95,8 @@ def handle_request(accepted_socket: socket) -> None:
 def main():
 
     print("Logs from your program will appear here!")
+    properties_path = pathlib.Path(sys.argv[1])
+    server_args = ServerArguments(properties_path)
 
     # Uncomment this to pass the first stage
 
@@ -80,7 +107,7 @@ def main():
     while True:
         accepted_socket, _ = server.accept()
         # wait for client
-        threading.Thread(target=handle_request, args=(accepted_socket,)).start()
+        threading.Thread(target=handle_request, args=(accepted_socket, server_args)).start()
 
 
 
