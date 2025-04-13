@@ -23,9 +23,9 @@ class ApiKeys(Enum):
         return obj
 
     def __init__(self, key: int, min_version: int, max_version: int):
-        self.key = key
-        self.min_version = min_version
-        self.max_version = max_version
+        self.key : int = key
+        self.min_version : int = min_version
+        self.max_version: int = max_version
 
     @staticmethod
     def get_Version(request_key: int):
@@ -71,16 +71,17 @@ def handle_request(accepted_socket: socket, server_args: ServerArguments) -> Non
         array_size = 1
 
         header: KafkaRequestHeader = KafkaRequestHeader.of(msg)
-        type = ApiKeys.get_Version(header.request_api_key)
-        error_bytes = get_version_error_number(header, type).to_bytes(2, "big", signed=False)
+        api_key = ApiKeys.get_Version(header.request_api_key)
+        error_bytes = get_version_error_number(header, api_key).to_bytes(2, "big", signed=False)
 
         message_bytes = header.correlation_id.to_bytes(4, byteorder="big", signed=False)
         message_bytes += error_bytes
-        message_bytes += int(2).to_bytes(1, byteorder="big", signed=False)
-        message_bytes += header.request_api_key.to_bytes(2, byteorder="big", signed=False)
-        message_bytes += API_VERSION_MIN_VERSION.to_bytes(2, byteorder="big", signed=False)
-        message_bytes += API_VERSION_MAX_VERSION.to_bytes(2, byteorder="big", signed=False)
-        message_bytes += tag_buffer
+        message_bytes += int(3).to_bytes(1, byteorder="big", signed=False)
+        for key in ApiKeys:
+            message_bytes += key.key.to_bytes(2, byteorder="big", signed=False)
+            message_bytes += key.min_version.to_bytes(2, byteorder="big", signed=False)
+            message_bytes += key.max_version.to_bytes(2, byteorder="big", signed=False)
+            message_bytes += tag_buffer
 
         message_bytes += THROTTLE_TIME_MS.to_bytes(4, byteorder="big", signed=False)
 
