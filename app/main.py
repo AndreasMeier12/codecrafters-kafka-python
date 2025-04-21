@@ -26,6 +26,7 @@ class KafkaRequestHeader:
     request_api_version: int
     correlation_id: int
     payload: bytes
+    raw_msg: bytes
 
     @classmethod
     def of(cls, msg: bytes) -> Self:
@@ -36,7 +37,7 @@ class KafkaRequestHeader:
         payload = msg[12:]
 
 
-        return KafkaRequestHeader(message_size, request_api_key, request_api_version, correlation_id, payload)
+        return KafkaRequestHeader(message_size, request_api_key, request_api_version, correlation_id, payload, msg)
 
 @dataclass()
 class ServerArguments:
@@ -52,7 +53,7 @@ class DescribeTopicPartition:
     cursor: int
     is_internal: bool = False
 
-    operations_allowed = int(0x00000df8).to_bytes(8)
+    operations_allowed = int(0x00000df8).to_bytes(4)
 
     @classmethod
     def from_bytes(cls, stuff: bytes):
@@ -89,27 +90,28 @@ class DescribeTopicPartition:
         buf = "".encode(ENCODING)
         buf += request.correlation_id.to_bytes(4, byteorder="big", signed=False)
         buf += TAG_BUFFER
-        buf += THROTTLE_TIME_MS.to_bytes(4, byteorder="big", signed=False)
+        buf += (0).to_bytes(4, byteorder="big", signed=False)
         buf += (len(self.topic_names) + 1).to_bytes(1, byteorder="big", signed=False)
         buf += (3).to_bytes(2, byteorder="big", signed=False)
 
 
         print(f"{self.topic_names=}")
 
-        for topic in self.topic_names:
-            print(f"{topic=}, reported topic length={len(topic.encode(ENCODING)) + 1}")
-            length = int( len(topic.encode(ENCODING)) + 1).to_bytes()
-            buf = buf + length
-            buf = buf + topic.encode(ENCODING)
-            buf = buf + int(0).to_bytes(16)
-            is_internal_msg = int(0).to_bytes(1)
-            buf = buf + is_internal_msg
-            buf = buf + self.partitions_array_length.to_bytes(1)
-            buf = buf + self.operations_allowed   #
-            buf = buf +  TAG_BUFFER #
-            print(f"{self.cursor=}")
-            buf = buf + self.cursor.to_bytes(1, byteorder="big", signed=False)
-            buf = buf + TAG_BUFFER
+        topic = self.topic_names[0]
+        print(f"{topic=}, reported topic length={len(topic.encode(ENCODING)) + 1}")
+        length = int( len(topic.encode(ENCODING)) + 1).to_bytes()
+        buf = buf + length
+        buf = buf + topic.encode(ENCODING)
+        buf = buf + int(0).to_bytes(16)
+        is_internal_msg = int(0).to_bytes(1)
+        buf = buf + is_internal_msg
+        buf = buf + self.partitions_array_length.to_bytes(1)
+        buf = buf + self.operations_allowed   #
+        buf = buf +  TAG_BUFFER #
+        print(len(buf.hex()))
+        print(f"{self.cursor=}")
+        buf = buf + (255).to_bytes(1, byteorder="big", signed=False)
+        buf = buf + TAG_BUFFER
         return  buf
 
 
@@ -145,9 +147,20 @@ def handle_api_version(request: KafkaRequestHeader, server_args: ServerArguments
     message_bytes += TAG_BUFFER
     return KafkaResponse(0, message_bytes)
 
+def compare_byteroos(a: bytes, b: bytes):
+    if len(a.hex()) != len(b.hex()):
+        print(f"lengths differ: {len(a.hex())} to {len(b.hex())}")
+
+    for (i, pair) in enumerate(zip(a.hex(),b.hex())):
+        if pair[0] != pair[1]:
+            print(f'pos {i}: {pair[0]}, {pair[1]}')
+
+
+
+
 def handle_describe_topic_partition(request: KafkaRequestHeader, server_args: ServerArguments):
     lolzers = DescribeTopicPartition.from_bytes(request.payload)
-
+    response_header = request.correlation_id.to_bytes(4, byteorder="big", signed=False)
 
     return KafkaResponse(3, lolzers.serialize(request))
 
