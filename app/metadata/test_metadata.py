@@ -10,3 +10,9 @@ class TestRecordValue(TestCase):
         metadata.ClusterMetaDataLog.of_bytes(stuff)
 
         self.fail()
+
+    def test_parse_uuid(self):
+        stuff = binascii.unhexlify('00000000000040008000000000000001')
+        parser = metadata._Parser(stuff)
+        id = parser.parse_uuid()
+        self.assertIsNotNone(id)

@@ -1,4 +1,5 @@
 import datetime
+import uuid
 from dataclasses import dataclass
 from enum import Enum
 from typing import Self
@@ -33,7 +34,7 @@ class Record:
     timestamp_delta: int
     offset_delta: int
 @dataclass
-class RecordValue:
+class FeatureLevelRecord:
     frame_version: int
     type: int
     version: int
@@ -42,7 +43,37 @@ class RecordValue:
     feature_level: int
     tagged_field_count: int
 
+@dataclass
+class TopicRecord:
+    frame_version: int
+    type: int
+    version: int
+    name_length: int
+    topic_name: str
+    topic_uuid: uuid.UUID
+    tagged_field_count: int
 
+
+@dataclass
+class PartitionRecord:
+    frame_version: int
+    type: int
+    version: int
+    partition_id: int
+    topic_uuid: uuid.UUID
+    replica_length: int
+    replica_array: int
+    length_replica_array: int
+    in_sync_replica_array: int
+    length_of_removing_replicas_array: int
+    length_of_adding_replicas_array: int
+    leader: int
+    leader_epoch: int
+    partition_epoch: int
+    length_directories_array: int
+    directories_array: list[uuid.UUID]
+    tagged_field_counts: int
+    headers_array_count: int
 
 
 @dataclass
@@ -108,14 +139,14 @@ class ClusterMetaDataLog:
             value = None
             values = []
             sub_index = 0
-            for i in range(value_length):
-                frame_version = parser.read(1)
-                type = parser.read(1)
-                version = parser.read(1)
-                name_length = parser.read(1)
-                name = parser.read_string(name_length)
-                feature_level = parser.read_string(2)
-                tagged_field_counts = parser.read(1)
+
+            frame_version = parser.read(1)
+            type = parser.read(1)
+            version = parser.read(1)
+            name_length = parser.read(1)
+            name = parser.read_string(name_length)
+            feature_level = parser.read_string(2)
+            tagged_field_counts = parser.read(1)
 
 
 class _Parser:
@@ -128,10 +159,16 @@ class _Parser:
         res: int = int.from_bytes(self.stuff[self.index: self.index + n], signed=signed)
         self.index += n
         return res
-    def read_string(self, n: int):
+    def read_string(self, n: int) -> str:
         res: str = self.stuff[self.index: self.index + n].decode(app.main.ENCODING)
         self.index += n
         return res
+
+    def parse_uuid(self) -> uuid.UUID:
+        res = uuid.UUID(bytes=self.stuff[self.index: self.index + 16])
+        self.index += 16
+        return  res
+
 
 
 
