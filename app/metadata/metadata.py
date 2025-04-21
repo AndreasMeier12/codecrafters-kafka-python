@@ -2,8 +2,8 @@ import datetime
 from dataclasses import dataclass
 from enum import Enum
 from typing import Self
+import app.main
 
-from PIL.ImageChops import offset
 
 
 class Compression(Enum):
@@ -32,6 +32,17 @@ class Record:
     attributes: int
     timestamp_delta: int
     offset_delta: int
+@dataclass
+class RecordValue:
+    frame_version: int
+    type: int
+    version: int
+    name_length: int
+    name: str
+    feature_level: int
+    tagged_field_count: int
+
+
 
 
 @dataclass
@@ -45,10 +56,6 @@ class ClusterMetaDataLog:
     base_timestamp: datetime.datetime
     max_timestamp: datetime.datetime
     producer_id: int
-
-@dataclass
-class RecordValue:
-
 
 
 
@@ -99,9 +106,16 @@ class RecordValue:
                 key = parser.read(key_length)
             value_length = parser.read(1, signed=True)
             value = None
-            if value_length > 0:
-                value = parser.read(value_length)
-
+            values = []
+            sub_index = 0
+            for i in range(value_length):
+                frame_version = parser.read(1)
+                type = parser.read(1)
+                version = parser.read(1)
+                name_length = parser.read(1)
+                name = parser.read_string(name_length)
+                feature_level = parser.read_string(2)
+                tagged_field_counts = parser.read(1)
 
 
 class _Parser:
@@ -112,6 +126,10 @@ class _Parser:
 
     def read(self, n: int, signed=False) -> int:
         res: int = int.from_bytes(self.stuff[self.index: self.index + n], signed=signed)
+        self.index += n
+        return res
+    def read_string(self, n: int):
+        res: str = self.stuff[self.index: self.index + n].decode(app.main.ENCODING)
         self.index += n
         return res
 
