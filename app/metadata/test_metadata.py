@@ -7,7 +7,28 @@ ROFLCOPTER_TEST_STRING = '00000000000000000000004f0000000102b069457c000000000000
 class TestRecordValue(TestCase):
     def test_of_bytes(self):
         stuff = binascii.unhexlify(ROFLCOPTER_TEST_STRING)
-        metadata.ClusterMetaDataLog.of_bytes(stuff)
+        parsed = metadata.ClusterMetaDataLog.of_bytes(stuff)
+        batch_1 = parsed.record_batches[0]
+        self.assertEqual(batch_1.batch_length, 79)
+        self.assertEqual(batch_1.partition_leader_epoch, 1)
+        self.assertEqual(batch_1.magic_byte, 2)
+        self.assertEqual(batch_1.crc, -1335278212)
+        self.assertEqual(batch_1.compression, metadata.Compression.NO_COMPRESSION)
+        self.assertFalse(batch_1.timestamp_type)
+        self.assertFalse(batch_1.is_transactional)
+        self.assertFalse(batch_1.is_control_batch)
+        self.assertFalse(batch_1.has_delete_horizon)
+        self.assertEqual(batch_1.last_offset_delta, 0)
+        self.assertIsNone(batch_1.base_timestamp)
+        self.assertIsNone(batch_1.max_timestamp)
+        self.assertEqual(batch_1.producer_id, -1)
+        self.assertEqual(batch_1.producer_epoch, -1)
+        self.assertEqual(batch_1.base_sequence, -1)
+        self.assertEqual(batch_1.records_length, 1)
+
+
+
+        self.assertEqual(parsed.record_batches, 2)
 
         self.fail()
 

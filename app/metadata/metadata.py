@@ -2,7 +2,7 @@ import datetime
 import uuid
 from dataclasses import dataclass
 from enum import Enum
-from typing import Self
+from typing import Self, Optional
 
 import app.main
 
@@ -63,8 +63,8 @@ class PartitionRecord:
     topic_uuid: uuid.UUID
     replica_length: int
     replica_array: list[int]
-    length_replica_array: int
-    in_sync_replica_array: int
+    length_in_sync_replica_array: int
+    in_sync_replica_array: list[int]
     length_of_removing_replicas_array: int
     length_of_adding_replicas_array: int
     leader: int
@@ -84,9 +84,15 @@ class RecordBatch:
     magic_byte: int
     crc: int
     compression: Compression
-    base_timestamp: datetime.datetime
-    max_timestamp: datetime.datetime
+    timestamp_type: bool
+    is_transactional: bool
+    is_control_batch: bool
+    has_delete_horizon: bool
+    last_offset_delta: int
+    base_timestamp: Optional[datetime.datetime]
+    max_timestamp: Optional[datetime.datetime]
     producer_id: int
+    producer_epoch: int
     base_sequence: int
     records_length: int
     records: list[PartitionRecord | TopicRecord | FeatureLevelRecord]
@@ -111,29 +117,29 @@ class ClusterMetaDataLog:
 
         parser: _Parser = _Parser(stuff)
         record_batches = []
-        while(parser.has_next()):
+        while parser.has_next():
 
             base_offset = parser.read(8)
 
             batch_length = parser.read(4)
             partition_leader_epoch = parser.read(4)
             magic_byte = parser.read(1)
-            crc = parser.read(4)
-            record_batch = parser.read(2)
-            compression = Compression.of(record_batch & 0x0003)
-            timestamp_type = record_batch & 0x0004
-            is_transactional = (record_batch & 0x0008) > 0
-            is_control_batch = (record_batch & 0x000f) > 0
-            has_delete_horizon = (record_batch & 0x0010) > 0
+            crc = parser.read(4, signed=True)
+            attribues = parser.read(2)
+            compression = Compression.of(attribues & 0x0003)
+            timestamp_type = attribues & 0x0004
+            is_transactional = (attribues & 0x0008) > 0
+            is_control_batch = (attribues & 0x000f) > 0
+            has_delete_horizon = (attribues & 0x0010) > 0
             last_offset_data = parser.read(4)
 
+            timestamp_raw = parser.read(8,)
+            base_timestamp= None
             timestamp_raw = parser.read(8)
-            base_timestamp: datetime.datetime.fromtimestamp(timestamp_raw)
-            timestamp_raw = parser.read(8)
-            max_timestamp: datetime.datetime.fromtimestamp(timestamp_raw)
-            producer_id = parser.read(8)
-            producer_epoch = parser.read(4)
-            base_sequence = parser.read(4)
+            max_timestamp= None
+            producer_id = parser.read(8, signed=True)
+            producer_epoch = parser.read(2, signed=True)
+            base_sequence = parser.read(4, signed=True)
             records_length = parser.read(4)
             records: list[TopicRecord | PartitionRecord | FeatureLevelRecord] = list()
             for i in range(records_length):
@@ -155,7 +161,7 @@ class ClusterMetaDataLog:
 
                 value = parser.parse_record(frame_version, type)
                 records.append(value)
-            val = RecordBatch(base_offset, batch_length, partition_leader_epoch, magic_byte, crc, compression, base_timestamp, max_timestamp, producer_id, base_sequence, record_length, records)
+            val = RecordBatch(base_offset, batch_length, partition_leader_epoch, magic_byte, crc, compression, timestamp_type, is_transactional, is_control_batch, has_delete_horizon, last_offset_data, base_timestamp, max_timestamp, producer_id, producer_epoch, base_sequence, 0, records)
             record_batches.append(val)
         return ClusterMetaDataLog(record_batches)
 
@@ -197,7 +203,7 @@ class _Parser:
             return TopicRecord(frame_version, type, version,  name_length, name, topic_uuid, tagged_field_count)
         if type == 3:
             version = self.read(1)
-            paritition_id = self.read(4)
+            partition_id = self.read(4)
             topic_uuid = self.parse_uuid()
             length_replica_array = self.read(1)
             replica_array = [            ]
@@ -207,8 +213,20 @@ class _Parser:
             in_sync_replica_array = []
             for i in range(length_in_sync_replica_array -1):
                 in_sync_replica_array.append(self.read(4))
+            length_removing_replicas_array = self.read(1)
+            length_adding_replicas_array = self.read(1)
+            leader = self.read(4)
+            leader_epoch = self.read(4)
+            partition_epoch = self.read(4)
+            length_directories_array = self.read(1)
+            directories = []
+            for i in range(length_directories_array -1):
+                directories.append(self.parse_uuid())
+            tagged_field_counts = self.read(1)
+            headers_array_count = self.read(1)
 
-            return PartitionRecord(frame_version, type, version, paritition_id, topic_uuid, length_replica_array, )
+            return PartitionRecord(frame_version, type, version, partition_id, topic_uuid, length_replica_array,
+                                   replica_array, length_in_sync_replica_array, in_sync_replica_array, length_removing_replicas_array, length_adding_replicas_array, leader, leader, leader_epoch, length_directories_array, directories, tagged_field_counts, headers_array_count)
 
     def has_next(self):
         return self.index < len(self.stuff)
