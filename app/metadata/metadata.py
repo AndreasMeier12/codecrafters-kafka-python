@@ -42,6 +42,7 @@ class FeatureLevelRecord:
     name: str
     feature_level: int
     tagged_field_count: int
+    headers_array_count: int
 
 @dataclass
 class TopicRecord:
@@ -52,6 +53,7 @@ class TopicRecord:
     topic_name: str
     topic_uuid: uuid.UUID
     tagged_field_count: int
+    headers_array_count: int
 
 
 @dataclass
@@ -84,7 +86,7 @@ class RecordBatch:
     magic_byte: int
     crc: int
     compression: Compression
-    timestamp_type: bool
+    timestamp_type: int
     is_transactional: bool
     is_control_batch: bool
     has_delete_horizon: bool
@@ -143,13 +145,13 @@ class ClusterMetaDataLog:
             records_length = parser.read(4)
             records: list[TopicRecord | PartitionRecord | FeatureLevelRecord] = list()
             for i in range(records_length):
-                record_length = parser.read(1, signed=True)
+                record_length = parser.read(1, signed=False)
                 attributes = parser.read(1)
                 timestamp_delta = parser.read(1, signed=True)
                 offset_delta = parser.read(1, signed=True)
                 key_length = parser.read(1, signed=True)
                 key = None
-                if key_length >= 0:
+                if key_length >= 0 and False:
                     key = parser.read(key_length)
                 value_length = parser.read(1, signed=True)
                 value = None
@@ -157,9 +159,8 @@ class ClusterMetaDataLog:
                 sub_index = 0
 
                 frame_version = parser.read(1)
-                type = parser.read(1)
-
-                value = parser.parse_record(frame_version, type)
+                value_type = parser.read(1)
+                value = parser.parse_record(frame_version, value_type)
                 records.append(value)
             val = RecordBatch(base_offset, batch_length, partition_leader_epoch, magic_byte, crc, compression, timestamp_type, is_transactional, is_control_batch, has_delete_horizon, last_offset_data, base_timestamp, max_timestamp, producer_id, producer_epoch, base_sequence, 0, records)
             record_batches.append(val)
@@ -189,18 +190,21 @@ class _Parser:
         return  res
     def parse_record(self, frame_version: int, type:int) -> TopicRecord | PartitionRecord | FeatureLevelRecord:
         if type == 12:
+            version = self.read(1)
             name_length = self.read(1)
-            name = self.read_string(name_length)
+            name = self.read_string(name_length -1)
             feature_level = self.read(2)
             tagged_field_counts = self.read(1)
-            return FeatureLevelRecord(frame_version, type, name_length, name, feature_level, tagged_field_counts)
+            headers_array_count = self.read(1)
+            return FeatureLevelRecord(frame_version, type, name_length, name, feature_level, tagged_field_counts, headers_array_count)
         if type == 2:
             version = self.read(1)
             name_length = self.read(1)
-            name = self.read_string(name_length)
+            name = self.read_string(name_length - 1)
             topic_uuid = self.parse_uuid()
             tagged_field_count = self.read(1)
-            return TopicRecord(frame_version, type, version,  name_length, name, topic_uuid, tagged_field_count)
+            headers_array_count = self.read(1)
+            return TopicRecord(frame_version, type, version,  name_length, name, topic_uuid, tagged_field_count, headers_array_count)
         if type == 3:
             version = self.read(1)
             partition_id = self.read(4)
