@@ -4,8 +4,12 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Self, Optional
 
+from sympy.solvers.diophantine.diophantine import length
+
 import app.main
 
+MSB_SET_MASK = 0b10000000
+REMOVE_MSB_MASK = 0b01111111
 
 
 class Compression(Enum):
@@ -177,6 +181,29 @@ class _Parser:
         res: int = int.from_bytes(self.stuff[self.index: self.index + n], signed=signed)
         self.index += n
         return res
+    def read_zig_zag(self,signed=False) -> int:
+        shift = 0
+        value = 0
+        aux = MSB_SET_MASK
+        index = self.index
+        record = b""
+        while aux & MSB_SET_MASK:
+            aux = self.stuff[index]
+            record += aux.to_bytes()
+            value += (aux & REMOVE_MSB_MASK) << shift
+            index += 1
+            shift += 7
+        if signed:
+            lsb = value & 0x01
+            if lsb:
+                value = -1 * ((value + 1) >> 1)
+            else:
+                value = value >> 1
+        self.index = index
+        return value
+        # https://gist.github.com/mfuerstenau/ba870a29e16536fdbaba
+    # https://github.com/fmoo/python-varint/blob/master/varint.py
+
     def read_string(self, n: int) -> str:
         res: str = self.stuff[self.index: self.index + n].decode(app.main.ENCODING)
         self.index += n

@@ -37,3 +37,15 @@ class TestRecordValue(TestCase):
         parser = metadata._Parser(stuff)
         id = parser.parse_uuid()
         self.assertIsNotNone(id)
+
+    def test_varint(self):
+        stuff = binascii.unhexlify('9001')
+        parser = metadata._Parser(stuff)
+        res = parser.read_zig_zag(signed=True)
+        self.assertEqual(72, res)
+
+        stuff = binascii.unhexlify('3c')
+        parser = metadata._Parser(stuff)
+        res = parser.read_zig_zag(signed=True)
+        self.assertEqual(30, res)
+
