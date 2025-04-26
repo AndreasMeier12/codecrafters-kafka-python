@@ -44,8 +44,19 @@ class TestRecordValue(TestCase):
         res = parser.read_zig_zag(signed=True)
         self.assertEqual(72, res)
 
+        stuff = binascii.unhexlify('9001')
+        parser = metadata._Parser(stuff)
+        res = parser.read_zig_zag(signed=True)
+        self.assertFalse(parser.has_next())
+
         stuff = binascii.unhexlify('3c')
         parser = metadata._Parser(stuff)
         res = parser.read_zig_zag(signed=True)
         self.assertEqual(30, res)
+
+
+        stuff = binascii.unhexlify('3c')
+        parser = metadata._Parser(stuff)
+        res = parser.read_zig_zag(signed=True)
+        self.assertFalse(parser.has_next())
 
