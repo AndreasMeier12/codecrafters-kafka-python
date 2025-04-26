@@ -193,7 +193,6 @@ class _Parser:
             name = self.read_string(name_length -1)
             feature_level = self.read(2)
             tagged_field_counts = self.read(1)
-            headers_array_count = self.read(1)
             return FeatureLevelRecord(frame_version, type, name_length, name, feature_level, tagged_field_counts)
         if type == 2:
             version = self.read(1)
@@ -201,7 +200,6 @@ class _Parser:
             name = self.read_string(name_length - 1)
             topic_uuid = self.parse_uuid()
             tagged_field_count = self.read(1)
-            headers_array_count = self.read(1)
             return TopicRecord(frame_version, type, version,  name_length, name, topic_uuid, tagged_field_count)
         if type == 3:
             version = self.read(1)
@@ -225,7 +223,6 @@ class _Parser:
             for i in range(length_directories_array -1):
                 directories.append(self.parse_uuid())
             tagged_field_counts = self.read(1)
-            headers_array_count = self.read(1)
 
             return PartitionRecord(frame_version, type, version, partition_id, topic_uuid, length_replica_array,
                                    replica_array, length_in_sync_replica_array, in_sync_replica_array, length_removing_replicas_array, length_adding_replicas_array, leader, leader, leader_epoch, length_directories_array, directories, tagged_field_counts)
