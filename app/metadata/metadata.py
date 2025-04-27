@@ -146,24 +146,19 @@ class ClusterMetaDataLog:
             records_length = parser.read(4)
             records: list[TopicRecord | PartitionRecord | FeatureLevelRecord] = list()
             for i in range(records_length):
-                record_length = parser.read(1, signed=False)
+                record_length = parser.read_zig_zag(signed=True)
                 attributes = parser.read(1)
-                timestamp_delta = parser.read(1, signed=True)
+                timestamp_delta = parser.read_zig_zag(signed=True)
                 offset_delta = parser.read(1, signed=True)
-                key_length = parser.read(1, signed=True)
-                key = None
-                if key_length >= 0 and False:
+                key_length = parser.read_zig_zag(signed=True)
+                if key_length >= 0:
                     key = parser.read(key_length)
-                value_length = parser.read(1, signed=True)
-                value = None
-                values = []
-                sub_index = 0
-
+                value_length = parser.read_zig_zag(signed=True)
                 frame_version = parser.read(1)
                 value_type = parser.read(1)
                 value = parser.parse_record(frame_version, value_type)
                 records.append(value)
-            headers_array_count = parser.read(1)
+                headers_array_count = parser.read_zig_zag()
             val = RecordBatch(base_offset, batch_length, partition_leader_epoch, magic_byte, crc, compression, timestamp_type, is_transactional, is_control_batch, has_delete_horizon, last_offset_data, base_timestamp, max_timestamp, producer_id, producer_epoch, base_sequence, 0, records)
             record_batches.append(val)
         return ClusterMetaDataLog(record_batches)
@@ -216,17 +211,17 @@ class _Parser:
     def parse_record(self, frame_version: int, type:int) -> TopicRecord | PartitionRecord | FeatureLevelRecord:
         if type == 12:
             version = self.read(1)
-            name_length = self.read(1)
+            name_length = self.read_zig_zag(signed=False)
             name = self.read_string(name_length -1)
             feature_level = self.read(2)
-            tagged_field_counts = self.read(1)
+            tagged_field_counts = self.read_zig_zag(signed=False)
             return FeatureLevelRecord(frame_version, type, name_length, name, feature_level, tagged_field_counts)
         if type == 2:
             version = self.read(1)
-            name_length = self.read(1)
+            name_length = self.read_zig_zag(signed=False)
             name = self.read_string(name_length - 1)
             topic_uuid = self.parse_uuid()
-            tagged_field_count = self.read(1)
+            tagged_field_count = self.read_zig_zag(signed=False)
             return TopicRecord(frame_version, type, version,  name_length, name, topic_uuid, tagged_field_count)
         if type == 3:
             version = self.read(1)

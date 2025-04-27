@@ -24,13 +24,28 @@ class TestRecordValue(TestCase):
         self.assertEqual(batch_1.producer_id, -1)
         self.assertEqual(batch_1.producer_epoch, -1)
         self.assertEqual(batch_1.base_sequence, -1)
-        self.assertEqual(batch_1.records_length, 1)
+        self.assertEqual(len(batch_1.records), 1)
+        record_1_1 = parsed.record_batches[0].records[0]
+        self.assertIsInstance(record_1_1, metadata.FeatureLevelRecord)
 
 
 
-        self.assertEqual(parsed.record_batches, 2)
+        batch_2 = parsed.record_batches[1]
+        self.assertEqual(len(batch_2.records), 3)
+        record_2_1 = batch_2.records[0]
+        self.assertIsInstance(record_2_1, metadata.TopicRecord)
 
-        self.fail()
+        record_2_2 = batch_2.records[1]
+        self.assertIsInstance(record_2_2, metadata.PartitionRecord)
+
+
+        record_2_3 = batch_2.records[1]
+        self.assertIsInstance(record_2_3, metadata.PartitionRecord)
+
+
+
+
+
 
     def test_parse_uuid(self):
         stuff = binascii.unhexlify('00000000000040008000000000000001')
