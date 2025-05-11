@@ -1,6 +1,7 @@
 import binascii
 import datetime
 import os.path
+import pathlib
 import uuid
 from collections import defaultdict
 from dataclasses import dataclass
@@ -167,8 +168,8 @@ class ClusterMetaDataLog:
 
 
 def read_partition(server_args: ServerArguments) -> ClusterMetaDataLog:
-    if os.path.exists(server_args.properties_path):
-        with open(server_args.properties_path, 'rb') as in_file:
+    if os.path.exists('/tmp/kraft-combined-logs/__cluster_metadata-0/00000000000000000000.log'):
+        with open('/tmp/kraft-combined-logs/__cluster_metadata-0/00000000000000000000.log', 'rb') as in_file:
             return ClusterMetaDataLog.of_bytes(in_file.read())
     default_string = '00000000000000000000004f0000000102b069457c00000000000000000191e05af81800000191e05af818ffffffffffffffffffffffffffff000000013a000000012e010c00116d657461646174612e76657273696f6e001400000000000000000001000000e4000000010224db12dd00000000000200000191e05b2d1500000191e05b2d15ffffffffffffffffffffffffffff000000033c00000001300102000473617a00000000000040008000000000000091000090010000020182010103010000000000000000000040008000000000000091020000000102000000010101000000010000000000000000021000000000004000800000000000000100009001000004018201010301000000010000000000004000800000000000009102000000010200000001010100000001000000000000000002100000000000400080000000000000010000'
     stuff = binascii.unhexlify(default_string)

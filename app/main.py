@@ -82,12 +82,13 @@ class DescribeTopicPartition:
             response_partition_limit_raw = stuff[index: index + 4]
             response_partition_limit = int.from_bytes(response_partition_limit_raw)
             index += 4
-        get_topic_stuff(metadata_log, topics)
+        topic_records = get_topic_stuff(metadata_log, topics)
+        error_code = 0 if topic_records else 3
 
 
 
         topic_id: uuid = uuid.UUID('00000000-0000-0000-0000-000000000000')
-        return DescribeTopicPartition(topic_id, None, array_length, response_partition_limit, topics, cursor)
+        return DescribeTopicPartition(topic_id, None, array_length, response_partition_limit, topics, cursor, error_code)
 
     def serialize(self, request: KafkaRequestHeader) -> bytes:
         buf = "".encode(ENCODING)

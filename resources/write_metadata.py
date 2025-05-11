@@ -4,7 +4,7 @@ ROFLCOPTER_TEST_STRING = '00000000000000000000004f0000000102b069457c000000000000
 
 
 def main():
-    with open('00000000000.log', 'wb') as out_file:
+    with open('__cluster_metadata-0/00000000000000000000.log', 'wb') as out_file:
         out_file.write(binascii.unhexlify(ROFLCOPTER_TEST_STRING))
 
 
