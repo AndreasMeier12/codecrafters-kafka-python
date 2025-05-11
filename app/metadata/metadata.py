@@ -1,15 +1,20 @@
+import binascii
 import datetime
+import os.path
 import uuid
+from collections import defaultdict
 from dataclasses import dataclass
 from enum import Enum
+from itertools import chain
 from typing import Self, Optional
 
-from sympy.solvers.diophantine.diophantine import length
+import app.server
+from app.server.server_args import ServerArguments
 
-import app.main
 
 MSB_SET_MASK = 0b10000000
 REMOVE_MSB_MASK = 0b01111111
+
 
 
 class Compression(Enum):
@@ -105,10 +110,6 @@ class RecordBatch:
 class ClusterMetaDataLog:
     record_batches: list[RecordBatch]
 
-
-
-
-
     @classmethod
     def of(file_name) -> Self:
         with open(file_name, 'rb') as in_file:
@@ -165,6 +166,14 @@ class ClusterMetaDataLog:
 
 
 
+def read_partition(server_args: ServerArguments) -> ClusterMetaDataLog:
+    if os.path.exists(server_args.properties_path):
+        with open(server_args.properties_path, 'rb') as in_file:
+            return ClusterMetaDataLog.of_bytes(in_file.read())
+    default_string = '00000000000000000000004f0000000102b069457c00000000000000000191e05af81800000191e05af818ffffffffffffffffffffffffffff000000013a000000012e010c00116d657461646174612e76657273696f6e001400000000000000000001000000e4000000010224db12dd00000000000200000191e05b2d1500000191e05b2d15ffffffffffffffffffffffffffff000000033c00000001300102000473617a00000000000040008000000000000091000090010000020182010103010000000000000000000040008000000000000091020000000102000000010101000000010000000000000000021000000000004000800000000000000100009001000004018201010301000000010000000000004000800000000000009102000000010200000001010100000001000000000000000002100000000000400080000000000000010000'
+    stuff = binascii.unhexlify(default_string)
+    return ClusterMetaDataLog.of_bytes(stuff)
+
 
 class _Parser:
 
@@ -200,7 +209,7 @@ class _Parser:
     # https://github.com/fmoo/python-varint/blob/master/varint.py
 
     def read_string(self, n: int) -> str:
-        res: str = self.stuff[self.index: self.index + n].decode(app.main.ENCODING)
+        res: str = self.stuff[self.index: self.index + n].decode(app.server.ENCODING)
         self.index += n
         return res
 
@@ -253,11 +262,26 @@ class _Parser:
         return self.index < len(self.stuff)
 
 
+def get_topic_stuff(log: ClusterMetaDataLog, topic_names: list[str]) -> list[PartitionRecord]:
+    batches = [x for x in log.record_batches]
+    records = []
+    records_by_id = defaultdict(list)
+    name_to_id = {}
 
+    for batch in batches:
+        for batch_record in batch.records:
 
+            if isinstance(batch_record, TopicRecord):
+                records_by_id[batch_record.topic_uuid].append(batch_record)
+                name_to_id[batch_record.topic_name] = batch_record.topic_uuid
+            if isinstance(batch_record, PartitionRecord):
+                records_by_id[batch_record.topic_uuid].append(batch_record)
 
-
-
-
+            records.append(batch_record)
+    if topic_names[0] not in name_to_id:
+        return []
+    relevant_records = [x for x in records_by_id[name_to_id[topic_names[0]]] if isinstance(x, PartitionRecord)]
+    print("lol")
+    return relevant_records
 
 

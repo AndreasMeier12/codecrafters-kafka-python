@@ -1,5 +1,4 @@
 import socket  # noqa: F401
-import struct
 import sys
 import threading
 import uuid
@@ -7,8 +6,10 @@ from dataclasses import dataclass
 import pathlib
 from enum import Enum
 from typing import Callable, Self
-
-ENCODING = "utf-8"
+from app.metadata import metadata
+from app.metadata.metadata import get_topic_stuff
+from app.server import ENCODING
+from app.server.server_args import ServerArguments
 
 API_VERSION_MIN_VERSION = 0
 API_VERSION_MAX_VERSION = 4
@@ -39,9 +40,6 @@ class KafkaRequestHeader:
 
         return KafkaRequestHeader(message_size, request_api_key, request_api_version, correlation_id, payload, msg)
 
-@dataclass()
-class ServerArguments:
-    properties_path: pathlib.Path
 
 @dataclass
 class DescribeTopicPartition:
@@ -51,12 +49,14 @@ class DescribeTopicPartition:
     response_partition_limit: int
     topic_names: list[str]
     cursor: int
+    error_code: int
     is_internal: bool = False
 
     operations_allowed = int(0x00000df8).to_bytes(4)
 
     @classmethod
-    def from_bytes(cls, stuff: bytes):
+    def from_bytes(cls, stuff: bytes, server_args: ServerArguments):
+        metadata_log = metadata.read_partition(server_args)
         length_raw = stuff[0:2] # 12-14
         length = int.from_bytes(length_raw, "big", signed=False)
         client_id = stuff[2: 2 + length].decode(ENCODING)
@@ -82,6 +82,9 @@ class DescribeTopicPartition:
             response_partition_limit_raw = stuff[index: index + 4]
             response_partition_limit = int.from_bytes(response_partition_limit_raw)
             index += 4
+        get_topic_stuff(metadata_log, topics)
+
+
 
         topic_id: uuid = uuid.UUID('00000000-0000-0000-0000-000000000000')
         return DescribeTopicPartition(topic_id, None, array_length, response_partition_limit, topics, cursor)
@@ -92,14 +95,14 @@ class DescribeTopicPartition:
         buf += TAG_BUFFER
         buf += (0).to_bytes(4, byteorder="big", signed=False)
         buf += (len(self.topic_names) + 1).to_bytes(1, byteorder="big", signed=False)
-        buf += (3).to_bytes(2, byteorder="big", signed=False)
+        buf += (self.error_code).to_bytes(2, byteorder="big", signed=False)
 
 
         print(f"{self.topic_names=}")
 
         topic = self.topic_names[0]
         print(f"{topic=}, reported topic length={len(topic.encode(ENCODING)) + 1}")
-        length = int( len(topic.encode(ENCODING)) + 1).to_bytes()
+        length = int(len(topic.encode(ENCODING)) + 1).to_bytes()
         buf = buf + length
         buf = buf + topic.encode(ENCODING)
         buf = buf + int(0).to_bytes(16)
@@ -159,7 +162,7 @@ def compare_byteroos(a: bytes, b: bytes):
 
 
 def handle_describe_topic_partition(request: KafkaRequestHeader, server_args: ServerArguments):
-    lolzers = DescribeTopicPartition.from_bytes(request.payload)
+    lolzers = DescribeTopicPartition.from_bytes(request.payload, server_args)
     response_header = request.correlation_id.to_bytes(4, byteorder="big", signed=False)
 
     return KafkaResponse(3, lolzers.serialize(request))
@@ -179,7 +182,8 @@ class ApiKeys(Enum):
         obj._value_ = args[0]
         return obj
 
-    def __init__(self, key: int, min_version: int, max_version: int, handler: Callable[[KafkaRequestHeader, ServerArguments], KafkaResponse]):
+    def __init__(self, key: int, min_version: int, max_version: int, handler: Callable[[KafkaRequestHeader,
+                                                                                        ServerArguments], KafkaResponse]):
         self.key: int = key
         self.min_version: int = min_version
         self.max_version: int = max_version
