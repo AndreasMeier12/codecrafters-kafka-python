@@ -192,6 +192,7 @@ class ApiKeys(Enum):
 
     @staticmethod
     def get_Version(request_key: int):
+        print(f'{request_key=}')
         return next(x for x in ApiKeys if x.key == request_key)
 
 
