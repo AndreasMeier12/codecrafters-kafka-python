@@ -87,7 +87,7 @@ class DescribeTopicPartition:
 
 
 
-        topic_id: uuid = uuid.UUID('00000000-0000-0000-0000-000000000000')
+        topic_id: uuid = uuid.UUID('00000000-0000-0000-0000-000000000000') if not topic_records else topic_records[0].topic_uuid
         return DescribeTopicPartition(topic_id, None, array_length, response_partition_limit, topics, cursor, error_code)
 
     def serialize(self, request: KafkaRequestHeader) -> bytes:
@@ -106,7 +106,7 @@ class DescribeTopicPartition:
         length = int(len(topic.encode(ENCODING)) + 1).to_bytes()
         buf = buf + length
         buf = buf + topic.encode(ENCODING)
-        buf = buf + int(0).to_bytes(16)
+        buf = buf + int(self.topic_id).to_bytes(16, byteorder="big", signed=False)
         is_internal_msg = int(0).to_bytes(1)
         buf = buf + is_internal_msg
         buf = buf + self.partitions_array_length.to_bytes(1)
